@@ -65,6 +65,11 @@ for i, ma in enumerate(ds_ma):
             ghi_ma_loi(ma)
             continue
 
+        df = df[df['volume'] > 0]
+        if len(df) < 15:
+            ghi_ma_loi(ma)
+            continue
+
         df['RSI14'] = ta.momentum.RSIIndicator(close=df['close'], window=14).rsi()
         df['RSI7'] = ta.momentum.RSIIndicator(close=df['close'], window=7).rsi()
         df['MFI14'] = ta.volume.MFIIndicator(high=df['high'], low=df['low'], close=df['close'], volume=df['volume'], window=14).money_flow_index()
