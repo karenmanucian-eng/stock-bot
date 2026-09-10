@@ -1,0 +1,41 @@
+name: Quet co phieu vung mua
+
+on:
+  schedule:
+    - cron: '0 2 * * 1-5'
+    - cron: '0 7 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  quet:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Lay code
+        uses: actions/checkout@v4
+
+      - name: Cai Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cai thu vien
+        run: pip install -r requirements.txt
+
+      - name: Chay bot
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+          VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
+          VNSTOCK_INTERACTIVE: '0'
+        run: python test.py
+
+      - name: Luu lai danh sach ma loi
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add ma_loi.csv
+          git diff --staged --quiet || git commit -m "Cap nhat danh sach ma loi"
+          git push
