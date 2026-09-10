@@ -30,7 +30,7 @@ jobs:
           CHAT_ID: ${{ secrets.CHAT_ID }}
           VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
           VNSTOCK_INTERACTIVE: '0'
-        run: python test.py
+        run: python -u test.py
 
       - name: Luu lai danh sach ma loi
         run: |
