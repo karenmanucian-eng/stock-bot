@@ -4,6 +4,7 @@ import time
 import requests
 import csv
 import os
+from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -11,6 +12,9 @@ load_dotenv()
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 FILE_MA_LOI = "ma_loi.csv"
+
+ngay_hom_nay = datetime.now().strftime("%Y-%m-%d")
+ngay_bat_dau = (datetime.now() - timedelta(days=100)).strftime("%Y-%m-%d")
 
 def gui_telegram(noi_dung):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -30,6 +34,13 @@ def ghi_ma_loi(ma):
     with open(FILE_MA_LOI, 'a', encoding='utf-8') as f:
         f.write(ma + "\n")
 
+def lay_gia_tri(df_ratio, danh_sach_id_uu_tien, cot):
+    for id_can_tim in danh_sach_id_uu_tien:
+        hang = df_ratio[df_ratio['item_id'] == id_can_tim]
+        if not hang.empty:
+            return hang[cot].values[0]
+    raise ValueError(f"Không tìm thấy chỉ số trong {danh_sach_id_uu_tien}")
+
 vnstock = Vnstock()
 listing = vnstock.stock(symbol="ACB", source="KBS").listing
 danh_sach = listing.symbols_by_exchange()
@@ -39,6 +50,7 @@ ds_ma_goc = chi_co_phieu['symbol'].tolist()
 ma_loi_cu = doc_ma_loi()
 ds_ma = [m for m in ds_ma_goc if m not in ma_loi_cu]
 
+print(f"Ngày quét: {ngay_hom_nay}")
 print(f"Tổng số mã: {len(ds_ma_goc)}, đã loại {len(ma_loi_cu)} mã lỗi cũ, còn quét: {len(ds_ma)}")
 
 ma_vao_vung_mua = []
@@ -48,38 +60,42 @@ for i, ma in enumerate(ds_ma):
     try:
         stock = vnstock.stock(symbol=ma, source="KBS")
 
-        df = stock.quote.history(start="2026-06-01", end="2026-09-07", interval="1D")
+        df = stock.quote.history(start=ngay_bat_dau, end=ngay_hom_nay, interval="1D")
         if df is None or len(df) < 15:
             ghi_ma_loi(ma)
             continue
 
         df['RSI14'] = ta.momentum.RSIIndicator(close=df['close'], window=14).rsi()
+        df['RSI7'] = ta.momentum.RSIIndicator(close=df['close'], window=7).rsi()
         df['MFI14'] = ta.volume.MFIIndicator(high=df['high'], low=df['low'], close=df['close'], volume=df['volume'], window=14).money_flow_index()
+        df['MFI11'] = ta.volume.MFIIndicator(high=df['high'], low=df['low'], close=df['close'], volume=df['volume'], window=11).money_flow_index()
 
         vol_tb_10 = df['volume'].tail(10).mean()
-        rsi_hien_tai = df['RSI14'].iloc[-1]
-        mfi_hien_tai = df['MFI14'].iloc[-1]
+        rsi14 = df['RSI14'].iloc[-1]
+        rsi7 = df['RSI7'].iloc[-1]
+        mfi14 = df['MFI14'].iloc[-1]
+        mfi11 = df['MFI11'].iloc[-1]
+        gia_dong_cua_moi_nhat = df['close'].iloc[-1]
 
         chi_so = stock.finance.ratio(period='quarter')
-        quy_gan_nhat = [c for c in chi_so.columns if c not in ['item', 'item_id']][0]
+        cot_gan_nhat = [c for c in chi_so.columns if c not in ['item', 'item_id']][0]
 
-        hang_pe = chi_so[chi_so['item'].str.contains('P/E', na=False)]
-        pe = hang_pe[quy_gan_nhat].values[0]
+        eps_ttm = lay_gia_tri(chi_so, ['trailing_eps'], cot_gan_nhat)
+        roa = lay_gia_tri(chi_so, ['roa_trailling', 'roa'], cot_gan_nhat)
+        roe = lay_gia_tri(chi_so, ['roe_trailling', 'roe'], cot_gan_nhat)
 
-        hang_roa = chi_so[chi_so['item'].str.contains('ROA', na=False)]
-        roa = hang_roa[quy_gan_nhat].values[0]
-
-        hang_roe = chi_so[chi_so['item'].str.contains('ROE', na=False)]
-        roe = hang_roe[quy_gan_nhat].values[0]
+        pe = (gia_dong_cua_moi_nhat * 1000) / eps_ttm if eps_ttm else None
 
         dat_kl = vol_tb_10 >= 20000
-        dat_rsi = rsi_hien_tai < 30
-        dat_mfi = mfi_hien_tai < 20
-        dat_pe = pe < 10
+        dat_rsi14 = rsi14 < 30
+        dat_rsi7 = rsi7 < 30
+        dat_mfi14 = mfi14 < 20
+        dat_mfi11 = mfi11 < 20
+        dat_pe = pe is not None and pe < 10
         dat_roa = roa > 0
         dat_roe = roe > 5
 
-        if dat_kl and dat_rsi and dat_mfi and dat_pe and dat_roa and dat_roe:
+        if dat_kl and dat_rsi14 and dat_rsi7 and dat_mfi14 and dat_mfi11 and dat_pe and dat_roa and dat_roe:
             ma_vao_vung_mua.append(ma)
             print(f"  -> ✅ {ma} VÀO VÙNG MUA!")
 
@@ -91,8 +107,8 @@ for i, ma in enumerate(ds_ma):
 
 if ma_vao_vung_mua:
     danh_sach_text = ", ".join(ma_vao_vung_mua)
-    gui_telegram(f"🔔 CẢNH BÁO VÙNG MUA\nCác mã đạt đủ điều kiện: {danh_sach_text}")
+    gui_telegram(f"🔔 CẢNH BÁO VÙNG MUA ({ngay_hom_nay})\nCác mã đạt đủ điều kiện: {danh_sach_text}")
 else:
-    gui_telegram("Quét xong: không có mã nào vào vùng mua lúc này.")
+    gui_telegram(f"Quét xong ({ngay_hom_nay}): không có mã nào vào vùng mua lúc này.")
 
 print("\nHoàn tất!")
