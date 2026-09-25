@@ -1,4 +1,4 @@
-   vnstock
-   ta
-   requests
-   python-dotenv
+vnstock==4.0.7
+ta
+requests
+python-dotenv
