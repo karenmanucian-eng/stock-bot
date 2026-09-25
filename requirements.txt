@@ -1,4 +1,4 @@
-vnstock
-ta
-requests
-python-dotenv
+   vnstock
+   ta
+   requests
+   python-dotenv
