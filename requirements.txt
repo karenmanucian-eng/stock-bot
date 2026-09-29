@@ -1,4 +1,4 @@
-vnstock==4.0.7
-ta
 requests
+pandas
+ta
 python-dotenv
